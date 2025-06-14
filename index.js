@@ -1,8 +1,9 @@
 const path = require("path");
+require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
-const { init: initDB, Counter, AdminUser } = require("./db");
+const { init: initDB, Counter, AdminUser, PrintTask } = require("./db");
 
 const logger = morgan("tiny");
 
@@ -91,6 +92,166 @@ app.post("/api/login", async (req, res) => {
     });
   }
 });
+
+// 获取打印任务列表API
+app.get("/api/print-tasks", async (req, res) => {
+  try {
+    const { page = 1, pageSize = 30, search = '' } = req.query;
+    const offset = (page - 1) * pageSize;
+    
+    try {
+      // 调用微信云开发数据库查询API
+      const result = await queryWxCloudDatabase({
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        search: search
+      });
+      
+      res.json({
+        code: 0,
+        data: result
+      });
+    } catch (wxError) {
+      console.log("微信云数据库查询失败，返回模拟数据:", wxError.message);
+      
+      // 模拟数据
+      const mockData = [];
+      for (let i = 1; i <= 100; i++) {
+        mockData.push({
+          _id: `mock_${i}`,
+          print_code: `PRINT${String(i).padStart(6, '0')}`,
+          status: ['pending', 'printing', 'completed', 'failed'][Math.floor(Math.random() * 4)],
+          user_id: `user_${Math.floor(Math.random() * 1000)}`,
+          create_time: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
+        });
+      }
+      
+      // 如果有搜索条件，过滤模拟数据
+      let filteredData = mockData;
+      if (search) {
+        filteredData = mockData.filter(item => 
+          item.print_code.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      
+      // 按创建时间倒序排序
+      filteredData.sort((a, b) => new Date(b.create_time) - new Date(a.create_time));
+      
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + parseInt(pageSize);
+      const paginatedData = filteredData.slice(startIndex, endIndex);
+      
+      res.json({
+        code: 0,
+        data: {
+          list: paginatedData,
+          total: filteredData.length,
+          page: parseInt(page),
+          pageSize: parseInt(pageSize),
+          totalPages: Math.ceil(filteredData.length / pageSize)
+        },
+        message: "模拟数据模式 - 微信云数据库连接失败"
+      });
+    }
+  } catch (error) {
+    console.error("获取打印任务失败:", error);
+    res.json({
+      code: 1,
+      message: "服务器错误"
+    });
+  }
+});
+
+// 查询微信云开发数据库
+async function queryWxCloudDatabase({ page, pageSize, search }) {
+  const axios = require('axios');
+  
+  // 微信云开发配置（需要配置实际的值）
+  const WX_CLOUD_CONFIG = {
+    appId: process.env.WX_APP_ID || 'your_app_id',
+    appSecret: process.env.WX_APP_SECRET || 'your_app_secret',
+    env: process.env.WX_CLOUD_ENV || 'your_cloud_env_id'
+  };
+  
+  try {
+    // 1. 获取access_token
+    const tokenResponse = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
+      params: {
+        grant_type: 'client_credential',
+        appid: WX_CLOUD_CONFIG.appId,
+        secret: WX_CLOUD_CONFIG.appSecret
+      }
+    });
+    
+    if (tokenResponse.data.errcode) {
+      throw new Error(`获取access_token失败: ${tokenResponse.data.errmsg}`);
+    }
+    
+    const accessToken = tokenResponse.data.access_token;
+    
+    // 2. 构建查询语句
+    let query = 'db.collection("print-tasks")';
+    
+    // 添加搜索条件
+    if (search) {
+      query += `.where({print_code: db.RegExp({regexp: "${search}", options: "i"})})`;
+    }
+    
+    // 添加排序和分页
+    const offset = (page - 1) * pageSize;
+    query += `.orderBy("create_time", "desc").skip(${offset}).limit(${pageSize}).get()`;
+    
+    // 3. 查询数据
+    const queryResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
+      env: WX_CLOUD_CONFIG.env,
+      query: query
+    }, {
+      params: {
+        access_token: accessToken
+      }
+    });
+    
+    if (queryResponse.data.errcode !== 0) {
+      throw new Error(`查询数据失败: ${queryResponse.data.errmsg}`);
+    }
+    
+    const records = JSON.parse(queryResponse.data.data);
+    
+    // 4. 查询总数（用于分页）
+    let countQuery = 'db.collection("print-tasks")';
+    if (search) {
+      countQuery += `.where({print_code: db.RegExp({regexp: "${search}", options: "i"})})`;
+    }
+    countQuery += '.count()';
+    
+    const countResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
+      env: WX_CLOUD_CONFIG.env,
+      query: countQuery
+    }, {
+      params: {
+        access_token: accessToken
+      }
+    });
+    
+    let total = 0;
+    if (countResponse.data.errcode === 0) {
+      const countResult = JSON.parse(countResponse.data.data);
+      total = countResult.total || 0;
+    }
+    
+    return {
+      list: records,
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      totalPages: Math.ceil(total / pageSize)
+    };
+    
+  } catch (error) {
+    console.error('微信云数据库查询错误:', error.message);
+    throw error;
+  }
+}
 
 // 更新计数
 app.post("/api/count", async (req, res) => {

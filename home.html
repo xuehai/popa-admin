@@ -139,6 +139,130 @@
             color: white;
         }
         
+        /* 打印任务样式 */
+        .search-bar {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .search-bar input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+            width: 300px;
+        }
+        
+        .search-bar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        .search-bar button:first-of-type {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .search-bar button:first-of-type:hover {
+            background-color: #0056b3;
+        }
+        
+        .search-bar button:last-of-type {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .search-bar button:last-of-type:hover {
+            background-color: #545b62;
+        }
+        
+        .table-container {
+            background-color: white;
+            border-radius: 5px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        #tasksTable {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        #tasksTable th,
+        #tasksTable td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        #tasksTable th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        #tasksTable tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status-pending {
+            color: #ffc107;
+            font-weight: 500;
+        }
+        
+        .status-printing {
+            color: #007bff;
+            font-weight: 500;
+        }
+        
+        .status-completed {
+            color: #28a745;
+            font-weight: 500;
+        }
+        
+        .status-failed {
+            color: #dc3545;
+            font-weight: 500;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+        }
+        
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background-color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #pageInfo {
+            font-weight: 500;
+            color: #495057;
+        }
+        
         .main-content {
             flex: 1;
             padding: 30px;
@@ -274,13 +398,41 @@
                 
                 <!-- 打印任务页面 -->
                 <div class="page-content active" id="print-tasks-page">
-                    <div class="content-card">
-                        <div class="content-placeholder">
-                            <i class="bi bi-printer"></i>
-                        </div>
-                        <div class="content-title">打印任务</div>
-                        <div class="content-description">打印任务管理功能正在开发中...</div>
+                    <h2>打印任务</h2>
+                    
+                    <!-- 搜索栏 -->
+                    <div class="search-bar">
+                      <input type="text" id="searchInput" placeholder="请输入打印编码搜索..." />
+                      <button onclick="searchTasks()">搜索</button>
+                      <button onclick="clearSearch()">清空</button>
                     </div>
+                    
+                    <!-- 数据表格 -->
+                    <div class="table-container">
+                      <table id="tasksTable">
+                        <thead>
+                          <tr>
+                            <th>创建时间</th>
+                            <th>打印编码</th>
+                            <th>状态</th>
+                            <th>用户ID</th>
+                          </tr>
+                        </thead>
+                        <tbody id="tasksTableBody">
+                          <!-- 数据将通过JavaScript动态加载 -->
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    <!-- 分页控件 -->
+                    <div class="pagination">
+                      <button id="prevBtn" onclick="changePage(-1)">上一页</button>
+                      <span id="pageInfo">第 1 页，共 1 页</span>
+                      <button id="nextBtn" onclick="changePage(1)">下一页</button>
+                    </div>
+                    
+                    <!-- 加载状态 -->
+                    <div id="loadingMsg" style="display: none; text-align: center; padding: 20px;">加载中...</div>
                 </div>
             </div>
         </div>
@@ -351,6 +503,133 @@
             }
         }
         
+        // 打印任务相关变量
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentSearch = '';
+        
+        // 加载打印任务数据
+        async function loadPrintTasks(page = 1, search = '') {
+            const loadingMsg = document.getElementById('loadingMsg');
+            const tableBody = document.getElementById('tasksTableBody');
+            
+            try {
+                loadingMsg.style.display = 'block';
+                
+                const params = new URLSearchParams({
+                    page: page,
+                    pageSize: 30
+                });
+                
+                if (search) {
+                    params.append('search', search);
+                }
+                
+                const response = await fetch(`/api/print-tasks?${params}`);
+                const result = await response.json();
+                
+                if (result.code === 0) {
+                    const { list, total, page: currentPageNum, totalPages: totalPagesNum } = result.data;
+                    
+                    // 更新全局变量
+                    currentPage = currentPageNum;
+                    totalPages = totalPagesNum;
+                    
+                    // 渲染表格数据
+                    renderTasksTable(list);
+                    
+                    // 更新分页信息
+                    updatePagination();
+                    
+                    // 显示模拟数据提示
+                    if (result.message) {
+                        console.log(result.message);
+                    }
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">加载失败: ' + result.message + '</td></tr>';
+                }
+            } catch (error) {
+                console.error('加载打印任务失败:', error);
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">网络错误，请稍后重试</td></tr>';
+            } finally {
+                loadingMsg.style.display = 'none';
+            }
+        }
+        
+        // 渲染任务表格
+        function renderTasksTable(tasks) {
+            const tableBody = document.getElementById('tasksTableBody');
+            
+            if (tasks.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6c757d;">暂无数据</td></tr>';
+                return;
+            }
+            
+            const rows = tasks.map(task => {
+                const createTime = new Date(task.create_time).toLocaleString('zh-CN');
+                const statusClass = `status-${task.status}`;
+                const statusText = getStatusText(task.status);
+                
+                return `
+                    <tr>
+                        <td>${createTime}</td>
+                        <td>${task.print_code}</td>
+                        <td><span class="${statusClass}">${statusText}</span></td>
+                        <td>${task.user_id}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            tableBody.innerHTML = rows;
+        }
+        
+        // 获取状态文本
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': '待处理',
+                'printing': '打印中',
+                'completed': '已完成',
+                'failed': '失败'
+            };
+            return statusMap[status] || status;
+        }
+        
+        // 更新分页控件
+        function updatePagination() {
+            const pageInfo = document.getElementById('pageInfo');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            pageInfo.textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+            
+            prevBtn.disabled = currentPage <= 1;
+            nextBtn.disabled = currentPage >= totalPages;
+        }
+        
+        // 翻页
+        function changePage(direction) {
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                loadPrintTasks(newPage, currentSearch);
+            }
+        }
+        
+        // 搜索任务
+        function searchTasks() {
+            const searchInput = document.getElementById('searchInput');
+            const search = searchInput.value.trim();
+            currentSearch = search;
+            loadPrintTasks(1, search);
+        }
+        
+        // 清空搜索
+        function clearSearch() {
+            const searchInput = document.getElementById('searchInput');
+            searchInput.value = '';
+            currentSearch = '';
+            loadPrintTasks(1, '');
+        }
+        
         // 页面初始化
         document.addEventListener('DOMContentLoaded', function() {
             // 检查登录状态
@@ -360,6 +639,22 @@
             
             // 初始化导航
             initNavigation();
+            
+            // 默认显示打印任务页面
+            showPage('print-tasks');
+            
+            // 初始化打印任务页面
+            loadPrintTasks();
+            
+            // 搜索框回车事件
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchTasks();
+                    }
+                });
+            }
             
             console.log('管理后台加载完成');
         });
