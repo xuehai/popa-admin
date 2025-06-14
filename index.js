@@ -26,6 +26,7 @@ app.get("/login", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log('收到登录请求:', username, password);
     
     if (!username || !password) {
       return res.json({
