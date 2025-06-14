@@ -114,42 +114,8 @@ app.get("/api/print-tasks", async (req, res) => {
     } catch (wxError) {
       console.log("微信云数据库查询失败，返回模拟数据:", wxError.message);
       
-      // 模拟数据
-      const mockData = [];
-      for (let i = 1; i <= 100; i++) {
-        mockData.push({
-          _id: `mock_${i}`,
-          print_code: `PRINT${String(i).padStart(6, '0')}`,
-          status: ['pending', 'printing', 'completed', 'failed'][Math.floor(Math.random() * 4)],
-          user_id: `user_${Math.floor(Math.random() * 1000)}`,
-          create_time: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
-        });
-      }
-      
-      // 如果有搜索条件，过滤模拟数据
-      let filteredData = mockData;
-      if (search) {
-        filteredData = mockData.filter(item => 
-          item.print_code.toLowerCase().includes(search.toLowerCase())
-        );
-      }
-      
-      // 按创建时间倒序排序
-      filteredData.sort((a, b) => new Date(b.create_time) - new Date(a.create_time));
-      
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + parseInt(pageSize);
-      const paginatedData = filteredData.slice(startIndex, endIndex);
-      
       res.json({
         code: 0,
-        data: {
-          list: paginatedData,
-          total: filteredData.length,
-          page: parseInt(page),
-          pageSize: parseInt(pageSize),
-          totalPages: Math.ceil(filteredData.length / pageSize)
-        },
         message: "模拟数据模式 - 微信云数据库连接失败"
       });
     }
@@ -190,7 +156,7 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     const accessToken = tokenResponse.data.access_token;
     
     // 2. 构建查询语句
-    let query = 'db.collection("print-tasks")';
+    let query = 'db.collection("print_tasks")';
     
     // 添加搜索条件
     if (search) {
@@ -218,7 +184,7 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     const records = JSON.parse(queryResponse.data.data);
     
     // 4. 查询总数（用于分页）
-    let countQuery = 'db.collection("print-tasks")';
+    let countQuery = 'db.collection("print_tasks")';
     if (search) {
       countQuery += `.where({print_code: db.RegExp({regexp: "${search}", options: "i"})})`;
     }
