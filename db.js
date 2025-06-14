@@ -28,7 +28,7 @@ const Counter = sequelize.define("Counter", {
 
 // 定义用户表模型
 const AdminUser = sequelize.define("AdminUser", {
-  username: {
+  user_name: {
     type: DataTypes.STRING,
     allowNull: false,
     unique: true,

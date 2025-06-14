@@ -341,6 +341,7 @@
                 });
                 
                 const result = await response.json();
+                console.log(result)
                 
                 if (result.code === 0) {
                     showAlert('登录成功！正在跳转...', 'success');
