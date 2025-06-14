@@ -341,13 +341,18 @@
                 });
                 
                 const result = await response.json();
-                console.log(result)
+                console.log('登录结果:'+result)
                 
                 if (result.code === 0) {
                     showAlert('登录成功！正在跳转...', 'success');
-                    // 登录成功后跳转到主页
+                    
+                    // 保存登录状态到localStorage
+                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('username', result.data.username);
+                    
+                    // 登录成功后跳转到管理后台
                     setTimeout(() => {
-                        window.location.href = '/';
+                        window.location.href = '/home';
                     }, 1500);
                 } else {
                     showAlert(result.message || '登录失败，请检查账号和密码');

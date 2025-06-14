@@ -22,6 +22,11 @@ app.get("/login", async (req, res) => {
   res.sendFile(path.join(__dirname, "login.html"));
 });
 
+// 管理后台首页
+app.get("/home", async (req, res) => {
+  res.sendFile(path.join(__dirname, "home.html"));
+});
+
 // 登录API
 app.post("/api/login", async (req, res) => {
   try {
