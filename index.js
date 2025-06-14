@@ -183,8 +183,8 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
       throw new Error(`查询数据失败: ${queryResponse.data.errmsg}`);
     }
     
+    console.log('print tasks查询结果:', queryResponse.data.data);
     const records = JSON.parse(queryResponse.data.data);
-    console.log('查询到的print tasks:', records);
     
     // 4. 查询总数（用于分页）
     let countQuery = 'db.collection("print_tasks")';

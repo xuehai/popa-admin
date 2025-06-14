@@ -52,7 +52,6 @@ async function init() {
     // 同步表结构
     await Counter.sync({ alter: true });
     await AdminUser.sync({ alter: true });
-    await PrintTask.sync({ alter: true });
     console.log('数据库表同步完成');
   } catch (error) {
     console.error('数据库连接失败:', error.message);
