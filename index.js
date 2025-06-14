@@ -166,6 +166,8 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     // 添加排序和分页
     const offset = (page - 1) * pageSize;
     query += `.orderBy("create_time", "desc").skip(${offset}).limit(${pageSize}).get()`;
+
+    console.log('print tasks查询语句:', query);
     
     // 3. 查询数据
     const queryResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
@@ -182,6 +184,7 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     }
     
     const records = JSON.parse(queryResponse.data.data);
+    console.log('查询到的print tasks:', records);
     
     // 4. 查询总数（用于分页）
     let countQuery = 'db.collection("print_tasks")';
