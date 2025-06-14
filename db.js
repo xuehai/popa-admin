@@ -66,5 +66,4 @@ module.exports = {
   init,
   Counter,
   AdminUser,
-  PrintTask,
 };
