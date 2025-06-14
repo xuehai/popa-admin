@@ -134,9 +134,9 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
   
   // 微信云开发配置（需要配置实际的值）
   const WX_CLOUD_CONFIG = {
-    appId: process.env.WX_APP_ID || 'your_app_id',
-    appSecret: process.env.WX_APP_SECRET || 'your_app_secret',
-    env: process.env.WX_CLOUD_ENV || 'your_cloud_env_id'
+    appId: 'wx61291ca2978a97ec',
+    appSecret: 'd58b4cc3f0590637de173fbaf4cd8d2d',
+    env: 'art-fans-cloud-8gk5o7dr7f4b9545'
   };
   
   try {
