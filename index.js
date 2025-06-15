@@ -114,8 +114,40 @@ app.get("/api/print-tasks", async (req, res) => {
     } catch (wxError) {
       console.log("微信云数据库查询失败，返回模拟数据:", wxError.message);
       
+      // 生成模拟数据
+      const mockData = [];
+      const statuses = ['pending', 'printing', 'completed', 'failed'];
+      const totalMockItems = 15;
+      
+      for (let i = 1; i <= totalMockItems; i++) {
+        const mockItem = {
+          _id: `mock_${i.toString().padStart(3, '0')}`,
+          print_code: `P${(Date.now() + i).toString().slice(-6)}`,
+          status: statuses[i % statuses.length],
+          user_id: `user_${i.toString().padStart(3, '0')}`,
+          create_time: new Date(Date.now() - (i * 3600000)).toISOString() // 每个任务间隔1小时
+        };
+        
+        // 如果有搜索条件，过滤数据
+        if (!search || mockItem.print_code.toLowerCase().includes(search.toLowerCase())) {
+          mockData.push(mockItem);
+        }
+      }
+      
+      // 分页处理
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedData = mockData.slice(startIndex, endIndex);
+      
       res.json({
         code: 0,
+        data: {
+          list: paginatedData,
+          total: mockData.length,
+          page: page,
+          pageSize: pageSize,
+          totalPages: Math.ceil(mockData.length / pageSize)
+        },
         message: "模拟数据模式 - 微信云数据库连接失败"
       });
     }
@@ -156,18 +188,21 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     const accessToken = tokenResponse.data.access_token;
     
     // 2. 构建查询语句
-    let query = 'db.collection("print_tasks")';
+    const collectionName = 'print_tasks';
+    let query = `db.collection("${collectionName}")`;
     
-    // 添加搜索条件
+    // 添加搜索条件（转义特殊字符）
     if (search) {
-      query += `.where({print_code: db.RegExp({regexp: "${search}", options: "i"})})`;
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      query += `.where({print_code: db.RegExp({regexp: "${escapedSearch}", options: "i"})})`;
     }
     
-    // 添加排序和分页
+    // 指定查询字段，排除create_time
+    query += '.field({create_time: true, print_code: true, status: true, user_id: true, _id: true})';
+    
+    // 添加排序和分页（注意：排序字段不在field中时可能会出错，这里改为按_id排序）
     const offset = (page - 1) * pageSize;
-    query += `.orderBy("create_time", "desc").skip(${offset}).limit(${pageSize}).get()`;
-
-    console.log('print tasks查询语句:', query);
+    query += `.orderBy("_id", "desc").skip(${offset}).limit(${pageSize}).get()`;
     
     // 3. 查询数据
     const queryResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
@@ -183,31 +218,27 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
       throw new Error(`查询数据失败: ${queryResponse.data.errmsg}`);
     }
     
-    console.log('print tasks查询结果:', queryResponse.data.data);
-    const records = JSON.parse(queryResponse.data.data);
+    let data = queryResponse.data.data;
     
-    // 4. 查询总数（用于分页）
-    let countQuery = 'db.collection("print_tasks")';
-    if (search) {
-      countQuery += `.where({print_code: db.RegExp({regexp: "${search}", options: "i"})})`;
-    }
-    countQuery += '.count()';
-    
-    const countResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
-      env: WX_CLOUD_CONFIG.env,
-      query: countQuery
-    }, {
-      params: {
-        access_token: accessToken
+    let records = [];
+    try {
+      if (data) {
+        // 检查数据是否已经是对象
+        if (typeof data === 'string') {
+          records = JSON.parse(data);
+        } else {
+          records = data;
+        }
       }
-    });
-    
-    let total = 0;
-    if (countResponse.data.errcode === 0) {
-      const countResult = JSON.parse(countResponse.data.data);
-      total = countResult.total || 0;
+    } catch (parseError) {
+      console.error('解析查询结果JSON失败:', parseError.message);
+      console.error('原始数据:', data);
+      console.error('数据长度:', data ? data.length : 'null');
+      throw new Error(`数据解析失败: ${parseError.message}`);
     }
-    
+
+    let total = records.length
+
     return {
       list: records,
       total: total,

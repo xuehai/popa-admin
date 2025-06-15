@@ -566,18 +566,38 @@
             }
             
             const rows = tasks.map(task => {
-                const createTime = new Date(task.create_time).toLocaleString('zh-CN');
+                // 处理创建时间
+                let createTime = 'N/A';
+                if (task.create_time) {
+                    try {
+                        // 如果是微信云数据库的时间格式
+                        if (task.create_time.$date) {
+                            createTime = new Date(task.create_time.$date).toLocaleString('zh-CN');
+                        } else if (task.create_time.$timestamp) {
+                            createTime = new Date(task.create_time.$timestamp * 1000).toLocaleString('zh-CN');
+                        } else {
+                            // 普通时间格式
+                            createTime = new Date(task.create_time).toLocaleString('zh-CN');
+                        }
+                    } catch (e) {
+                        console.error('时间格式化错误:', e, task.create_time);
+                        createTime = 'N/A';
+                    }
+                }
+                
                 const statusClass = `status-${task.status}`;
                 const statusText = getStatusText(task.status);
                 
-                return `
+                const content = `
                     <tr>
                         <td>${createTime}</td>
-                        <td>${task.print_code}</td>
+                        <td>${task.print_code || 'N/A'}</td>
                         <td><span class="${statusClass}">${statusText}</span></td>
-                        <td>${task.user_id}</td>
+                        <td>${task.user_id || 'N/A'}</td>
                     </tr>
                 `;
+                console.log('渲染任务数据:', task);
+                return content;
             }).join('');
             
             tableBody.innerHTML = rows;
