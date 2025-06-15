@@ -297,9 +297,7 @@ async function updateWxCloudTask(taskId, status) {
     let accessToken, envId;
     
     try {
-      // 优先使用环境变量配置
       const tokenData = await getWxCloudAccessToken();
-      console.log('tokenData:', tokenData);
       accessToken = tokenData.accessToken;
       envId = tokenData.env;
     } catch (tokenError) {
@@ -308,8 +306,6 @@ async function updateWxCloudTask(taskId, status) {
     
     // 构建更新查询语句
     const query = `db.collection("print_tasks").doc("${taskId}").update({data:{status: "${status}", updateTime: "${new Date().toISOString()}"}})`;  
-    console.log('Query:', query);
-    console.log('Access Token:', accessToken);
     
     // 调用微信云数据库HTTP API - 将access_token作为URL参数
     const response = await fetch(`https://api.weixin.qq.com/tcb/databaseupdate?access_token=${accessToken}`, {
