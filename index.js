@@ -278,21 +278,7 @@ app.post("/api/tasks/update-status", async (req, res) => {
       }
       
     } catch (wxError) {
-      console.warn('微信云数据库更新失败，使用模拟模式:', wxError.message);
-      
-      // 降级到模拟更新操作
-      console.log(`模拟更新任务 ${taskId} 状态为 ${status}`);
-      
-      res.json({
-        success: true,
-        message: "状态更新成功（模拟模式）",
-        data: {
-          taskId,
-          status,
-          updateTime: new Date().toISOString(),
-          mode: 'simulation'
-        }
-      });
+      console.warn('微信云数据库更新失败:', wxError.message);
     }
     
   } catch (error) {
