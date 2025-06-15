@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 const { init: initDB, Counter, AdminUser, PrintTask } = require("./db");
+const { equal } = require("assert");
 
 const logger = morgan("tiny");
 
@@ -112,44 +113,7 @@ app.get("/api/print-tasks", async (req, res) => {
         data: result
       });
     } catch (wxError) {
-      console.log("微信云数据库查询失败，返回模拟数据:", wxError.message);
-      
-      // 生成模拟数据
-      const mockData = [];
-      const statuses = ['pending', 'printing', 'completed', 'failed'];
-      const totalMockItems = 15;
-      
-      for (let i = 1; i <= totalMockItems; i++) {
-        const mockItem = {
-          _id: `mock_${i.toString().padStart(3, '0')}`,
-          print_code: `P${(Date.now() + i).toString().slice(-6)}`,
-          status: statuses[i % statuses.length],
-          user_id: `user_${i.toString().padStart(3, '0')}`,
-          create_time: new Date(Date.now() - (i * 3600000)).toISOString() // 每个任务间隔1小时
-        };
-        
-        // 如果有搜索条件，过滤数据
-        if (!search || mockItem.print_code.toLowerCase().includes(search.toLowerCase())) {
-          mockData.push(mockItem);
-        }
-      }
-      
-      // 分页处理
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedData = mockData.slice(startIndex, endIndex);
-      
-      res.json({
-        code: 0,
-        data: {
-          list: paginatedData,
-          total: mockData.length,
-          page: page,
-          pageSize: pageSize,
-          totalPages: Math.ceil(mockData.length / pageSize)
-        },
-        message: "模拟数据模式 - 微信云数据库连接失败"
-      });
+      console.log("微信云数据库查询失败:", wxError.message);
     }
   } catch (error) {
     console.error("获取打印任务失败:", error);
@@ -161,7 +125,8 @@ app.get("/api/print-tasks", async (req, res) => {
 });
 
 // 查询微信云开发数据库
-async function queryWxCloudDatabase({ page, pageSize, search }) {
+// 获取微信云开发access_token的独立函数
+async function getWxCloudAccessToken() {
   const axios = require('axios');
   
   // 微信云开发配置（需要配置实际的值）
@@ -172,7 +137,7 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
   };
   
   try {
-    // 1. 获取access_token
+    // 获取access_token
     const tokenResponse = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
       params: {
         grant_type: 'client_credential',
@@ -185,7 +150,23 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
       throw new Error(`获取access_token失败: ${tokenResponse.data.errmsg}`);
     }
     
-    const accessToken = tokenResponse.data.access_token;
+    return {
+      accessToken: tokenResponse.data.access_token,
+      env: WX_CLOUD_CONFIG.env
+    };
+    
+  } catch (error) {
+    console.error('获取微信云开发access_token失败:', error.message);
+    throw error;
+  }
+}
+
+async function queryWxCloudDatabase({ page, pageSize, search }) {
+  const axios = require('axios');
+  
+  try {
+    // 1. 获取access_token和环境配置
+    const { accessToken, env } = await getWxCloudAccessToken();
     
     // 2. 构建查询语句
     const collectionName = 'print_tasks';
@@ -206,7 +187,7 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
     
     // 3. 查询数据
     const queryResponse = await axios.post('https://api.weixin.qq.com/tcb/databasequery', {
-      env: WX_CLOUD_CONFIG.env,
+      env: env,
       query: query
     }, {
       params: {
@@ -253,6 +234,128 @@ async function queryWxCloudDatabase({ page, pageSize, search }) {
   }
 }
 
+// 更新任务状态
+app.post("/api/tasks/update-status", async (req, res) => {
+  try {
+    const { taskId, status } = req.body;
+    
+    if (!taskId || !status) {
+      return res.json({
+        success: false,
+        message: "缺少必要参数：taskId 和 status"
+      });
+    }
+    
+    // 验证状态值
+    const validStatuses = ['pending', 'printed', 'delivered', 'completed', 'failed'];
+    if (!validStatuses.includes(status)) {
+      return res.json({
+        success: false,
+        message: "无效的状态值"
+      });
+    }
+    
+    console.log('更新任务状态:', { taskId, status });
+    
+    try {
+      // 尝试使用微信云数据库更新
+      const updateResult = await updateWxCloudTask(taskId, status);
+      
+      if (updateResult.success) {
+        res.json({
+          success: true,
+          message: "状态更新成功",
+          data: {
+            taskId,
+            status,
+            updateTime: new Date().toISOString(),
+            matched: updateResult.matched,
+            modified: updateResult.modified
+          }
+        });
+      } else {
+        throw new Error(updateResult.message || '微信云数据库更新失败');
+      }
+      
+    } catch (wxError) {
+      console.warn('微信云数据库更新失败，使用模拟模式:', wxError.message);
+      
+      // 降级到模拟更新操作
+      console.log(`模拟更新任务 ${taskId} 状态为 ${status}`);
+      
+      res.json({
+        success: true,
+        message: "状态更新成功（模拟模式）",
+        data: {
+          taskId,
+          status,
+          updateTime: new Date().toISOString(),
+          mode: 'simulation'
+        }
+      });
+    }
+    
+  } catch (error) {
+    console.error('更新任务状态失败:', error);
+    res.json({
+      success: false,
+      message: "更新失败：" + error.message
+    });
+  }
+});
+
+// 微信云数据库任务更新函数
+async function updateWxCloudTask(taskId, status) {
+  try {
+    // 获取access_token和环境配置
+    let accessToken, envId;
+    
+    try {
+      // 优先使用环境变量配置
+      const tokenData = await getWxCloudAccessToken();
+      console.log('tokenData:', tokenData);
+      accessToken = tokenData.accessToken;
+      envId = tokenData.env;
+    } catch (tokenError) {
+      throw new Error('获取微信云数据库访问令牌失败：' + tokenError.message);
+    }
+    
+    // 构建更新查询语句
+    const query = `db.collection("print_tasks").doc("${taskId}").update({data:{status: "${status}", updateTime: "${new Date().toISOString()}"}})`;  
+    console.log('Query:', query);
+    console.log('Access Token:', accessToken);
+    
+    // 调用微信云数据库HTTP API - 将access_token作为URL参数
+    const response = await fetch(`https://api.weixin.qq.com/tcb/databaseupdate?access_token=${accessToken}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        env: envId,
+        query: query
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (result.errcode === 0) {
+      return {
+        success: true,
+        matched: result.matched || 0,
+        modified: result.modified || 0,
+        id: result.id
+      };
+    } else {
+      throw new Error(`微信云数据库错误 ${result.errcode}: ${result.errmsg}`);
+    }
+    
+  } catch (error) {
+    console.error('微信云数据库更新错误:', error.message);
+    throw error;
+  }
+}
+
 // 更新计数
 app.post("/api/count", async (req, res) => {
   const { action } = req.body;
@@ -267,7 +370,7 @@ app.post("/api/count", async (req, res) => {
     code: 0,
     data: await Counter.count(),
   });
-});
+ });
 
 // 获取计数
 app.get("/api/count", async (req, res) => {

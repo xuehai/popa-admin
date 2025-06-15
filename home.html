@@ -253,6 +253,58 @@
             border-color: #007bff;
         }
         
+        /* 操作按钮样式 */
+        .btn-action {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 60px;
+        }
+        
+        .btn-print {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-print:hover {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .btn-ship {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .btn-ship:hover {
+            background-color: #1e7e34;
+            transform: translateY(-1px);
+        }
+        
+        .btn-complete {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-complete:hover {
+            background-color: #e0a800;
+            transform: translateY(-1px);
+        }
+        
+        .btn-action:active {
+            transform: translateY(0);
+        }
+        
+        .btn-action:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
         .pagination button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -416,6 +468,7 @@
                             <th>打印编码</th>
                             <th>状态</th>
                             <th>用户ID</th>
+                            <th>操作</th>
                           </tr>
                         </thead>
                         <tbody id="tasksTableBody">
@@ -470,26 +523,39 @@
             return true;
         }
         
-        // 导航切换功能
-        function initNavigation() {
+        // 显示指定页面
+        function showPage(targetPage) {
             const navLinks = document.querySelectorAll('.nav-link');
             const pageContents = document.querySelectorAll('.page-content');
             const pageTitle = document.getElementById('pageTitle');
             
+            // 移除所有活动状态
+            navLinks.forEach(nav => nav.classList.remove('active'));
+            pageContents.forEach(page => page.classList.remove('active'));
+            
+            // 添加当前活动状态
+            const targetNav = document.querySelector(`[data-page="${targetPage}"]`);
+            const targetPageElement = document.getElementById(targetPage + '-page');
+            
+            if (targetNav) {
+                targetNav.classList.add('active');
+            }
+            if (targetPageElement) {
+                targetPageElement.classList.add('active');
+            }
+            
+            // 更新页面标题
+            pageTitle.textContent = pageTitles[targetPage] || '管理后台';
+        }
+        
+        // 导航切换功能
+        function initNavigation() {
+            const navLinks = document.querySelectorAll('.nav-link');
+            
             navLinks.forEach(link => {
                 link.addEventListener('click', function() {
                     const targetPage = this.getAttribute('data-page');
-                    
-                    // 移除所有活动状态
-                    navLinks.forEach(nav => nav.classList.remove('active'));
-                    pageContents.forEach(page => page.classList.remove('active'));
-                    
-                    // 添加当前活动状态
-                    this.classList.add('active');
-                    document.getElementById(targetPage + '-page').classList.add('active');
-                    
-                    // 更新页面标题
-                    pageTitle.textContent = pageTitles[targetPage] || '管理后台';
+                    showPage(targetPage);
                 });
             });
         }
@@ -558,12 +624,12 @@
             // 数据验证
             if (!Array.isArray(tasks)) {
                 console.error('renderTasksTable: tasks不是数组', tasks);
-                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">数据格式错误</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #dc3545;">数据格式错误</td></tr>';
                 return;
             }
             
             if (tasks.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6c757d;">暂无数据</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #6c757d;">暂无数据</td></tr>';
                 return;
             }
             
@@ -591,34 +657,72 @@
                 tableBody.innerHTML = rows;
             } catch (error) {
                 console.error('渲染任务表格失败:', error);
-                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">渲染失败，请刷新重试</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #dc3545;">渲染失败，请刷新重试</td></tr>';
             }
         }
         
         // 创建单个任务行
          function createTaskRow(task) {
-             const createTime = formatCreateTime(task.create_time);
-             const printCode = sanitizeText(task.print_code) || 'N/A';
-             const status = task.status || 'unknown';
-             const userId = sanitizeText(task.user_id) || 'N/A';
-             
-             const statusClass = `status-${status}`;
-             const statusText = getStatusText(status);
-             
-             return `
-                 <tr data-task-id="${sanitizeText(task._id || '')}">
-                     <td title="${createTime}">${createTime}</td>
-                     <td title="${printCode}">${printCode}</td>
-                     <td><span class="${statusClass}" title="${statusText}">${statusText}</span></td>
-                     <td title="${userId}">${userId}</td>
-                 </tr>
-             `;
-         }
+              const createTime = formatCreateTime(task.create_time);
+              const printCode = sanitizeText(task.print_code) || 'N/A';
+              const status = task.status || 'unknown';
+              const userId = sanitizeText(task.user_id) || 'N/A';
+              const taskId = sanitizeText(task._id || '');
+              
+              const statusClass = `status-${status}`;
+              const statusText = getStatusText(status);
+              
+              // 根据状态生成操作按钮
+              const actionButton = createActionButton(status, taskId, printCode);
+              
+              return `
+                  <tr data-task-id="${taskId}">
+                      <td title="${createTime}">${createTime}</td>
+                      <td title="${printCode}">${printCode}</td>
+                      <td><span class="${statusClass}" title="${statusText}">${statusText}</span></td>
+                      <td title="${userId}">${userId}</td>
+                      <td>${actionButton}</td>
+                  </tr>
+              `;
+          }
         
         // 创建错误行
          function createErrorRow(message) {
-             return `<tr><td colspan="4" style="text-align: center; color: #dc3545;">${sanitizeText(message)}</td></tr>`;
-         }
+              return `<tr><td colspan="5" style="text-align: center; color: #dc3545;">${sanitizeText(message)}</td></tr>`;
+          }
+          
+          // 创建操作按钮
+          function createActionButton(status, taskId, printCode) {
+              let buttonText = '';
+              let buttonClass = 'btn-action';
+              let buttonAction = '';
+              
+              switch(status) {
+                  case 'pending':
+                      buttonText = '打印';
+                      buttonClass += ' btn-print';
+                      buttonAction = `onclick="handlePrintAction('${taskId}', '${printCode}')"`;
+                      break;
+                  case 'printed':
+                      buttonText = '发货';
+                      buttonClass += ' btn-ship';
+                      buttonAction = `onclick="handleShipAction('${taskId}', '${printCode}')"`;
+                      break;
+                  case 'delivered':
+                      buttonText = '完成';
+                      buttonClass += ' btn-complete';
+                      buttonAction = `onclick="handleCompleteAction('${taskId}', '${printCode}')"`;
+                      break;
+                  case 'completed':
+                      return '<span style="color: #28a745; font-weight: 500;">已完成</span>';
+                  case 'failed':
+                      return '<span style="color: #dc3545; font-weight: 500;">失败</span>';
+                  default:
+                      return '<span style="color: #6c757d;">无操作</span>';
+              }
+              
+              return `<button class="${buttonClass}" ${buttonAction}>${buttonText}</button>`;
+          }
         
         // 格式化创建时间
         function formatCreateTime(createTime) {
@@ -676,12 +780,113 @@
             });
         }
         
+        // 操作按钮处理函数
+        function handlePrintAction(taskId, printCode) {
+            console.log('执行打印操作:', { taskId, printCode });
+            
+            if (confirm(`确认要打印任务 ${printCode} 吗？`)) {
+                // 禁用按钮防止重复点击
+                const button = event.target;
+                button.disabled = true;
+                button.textContent = '处理中...';
+                
+                // 这里可以调用API更新任务状态
+                updateTaskStatus(taskId, 'printed')
+                    .then(() => {
+                        alert('打印操作成功！');
+                        loadPrintTasks(); // 重新加载任务列表
+                    })
+                    .catch(error => {
+                        console.error('打印操作失败:', error);
+                        alert('打印操作失败，请重试');
+                        button.disabled = false;
+                        button.textContent = '打印';
+                    });
+            }
+        }
+        
+        function handleShipAction(taskId, printCode) {
+            console.log('执行发货操作:', { taskId, printCode });
+            
+            if (confirm(`确认要发货任务 ${printCode} 吗？`)) {
+                const button = event.target;
+                button.disabled = true;
+                button.textContent = '处理中...';
+                
+                updateTaskStatus(taskId, 'delivered')
+                    .then(() => {
+                        alert('发货操作成功！');
+                        loadPrintTasks();
+                    })
+                    .catch(error => {
+                        console.error('发货操作失败:', error);
+                        alert('发货操作失败，请重试');
+                        button.disabled = false;
+                        button.textContent = '发货';
+                    });
+            }
+        }
+        
+        function handleCompleteAction(taskId, printCode) {
+            console.log('执行完成操作:', { taskId, printCode });
+            
+            if (confirm(`确认要完成任务 ${printCode} 吗？`)) {
+                const button = event.target;
+                button.disabled = true;
+                button.textContent = '处理中...';
+                
+                updateTaskStatus(taskId, 'completed')
+                    .then(() => {
+                        alert('完成操作成功！');
+                        loadPrintTasks();
+                    })
+                    .catch(error => {
+                        console.error('完成操作失败:', error);
+                        alert('完成操作失败，请重试');
+                        button.disabled = false;
+                        button.textContent = '完成';
+                    });
+            }
+        }
+        
+        // 更新任务状态的API调用
+        async function updateTaskStatus(taskId, newStatus) {
+            try {
+                const response = await fetch('/api/tasks/update-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        taskId: taskId,
+                        status: newStatus
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (!result.success) {
+                    throw new Error(result.message || '更新状态失败');
+                }
+                
+                return result;
+            } catch (error) {
+                console.error('更新任务状态失败:', error);
+                throw error;
+            }
+        }
+        
         // 获取状态文本
         function getStatusText(status) {
             const statusMap = {
                 'pending': '待处理',
-                'printing': '打印中',
-                'completed': '已完成',
+                'printed': '已打印',
+                'delivered':'已发货',
+                'completed':'已完成',
                 'failed': '失败'
             };
             return statusMap[status] || status;
