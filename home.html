@@ -540,11 +540,6 @@
                     
                     // 更新分页信息
                     updatePagination();
-                    
-                    // 显示模拟数据提示
-                    if (result.message) {
-                        console.log(result.message);
-                    }
                 } else {
                     tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">加载失败: ' + result.message + '</td></tr>';
                 }
@@ -560,47 +555,125 @@
         function renderTasksTable(tasks) {
             const tableBody = document.getElementById('tasksTableBody');
             
+            // 数据验证
+            if (!Array.isArray(tasks)) {
+                console.error('renderTasksTable: tasks不是数组', tasks);
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">数据格式错误</td></tr>';
+                return;
+            }
+            
             if (tasks.length === 0) {
                 tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #6c757d;">暂无数据</td></tr>';
                 return;
             }
             
-            const rows = tasks.map(task => {
-                // 处理创建时间
-                let createTime = 'N/A';
-                if (task.create_time) {
-                    try {
-                        // 如果是微信云数据库的时间格式
-                        if (task.create_time.$date) {
-                            createTime = new Date(task.create_time.$date).toLocaleString('zh-CN');
-                        } else if (task.create_time.$timestamp) {
-                            createTime = new Date(task.create_time.$timestamp * 1000).toLocaleString('zh-CN');
-                        } else {
-                            // 普通时间格式
-                            createTime = new Date(task.create_time).toLocaleString('zh-CN');
-                        }
-                    } catch (e) {
-                        console.error('时间格式化错误:', e, task.create_time);
-                        createTime = 'N/A';
+            try {
+                const rows = tasks.map((task, index) => {
+                    // 数据安全处理：确保task是对象
+                    let taskData = task;
+                    if (typeof task === 'string') {
+                         try {
+                             taskData = JSON.parse(task);
+                         } catch (parseError) {
+                             console.error(`解析第${index + 1}条任务数据失败:`, parseError, task);
+                             return createErrorRow(`第${index + 1}条数据格式错误`);
+                         }
+                     }
+                     
+                     if (!taskData || typeof taskData !== 'object') {
+                         console.error(`第${index + 1}条任务数据无效:`, taskData);
+                         return createErrorRow(`第${index + 1}条数据无效`);
+                     }
+                     
+                     return createTaskRow(taskData);
+                }).join('');
+                
+                tableBody.innerHTML = rows;
+            } catch (error) {
+                console.error('渲染任务表格失败:', error);
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #dc3545;">渲染失败，请刷新重试</td></tr>';
+            }
+        }
+        
+        // 创建单个任务行
+         function createTaskRow(task) {
+             const createTime = formatCreateTime(task.create_time);
+             const printCode = sanitizeText(task.print_code) || 'N/A';
+             const status = task.status || 'unknown';
+             const userId = sanitizeText(task.user_id) || 'N/A';
+             
+             const statusClass = `status-${status}`;
+             const statusText = getStatusText(status);
+             
+             return `
+                 <tr data-task-id="${sanitizeText(task._id || '')}">
+                     <td title="${createTime}">${createTime}</td>
+                     <td title="${printCode}">${printCode}</td>
+                     <td><span class="${statusClass}" title="${statusText}">${statusText}</span></td>
+                     <td title="${userId}">${userId}</td>
+                 </tr>
+             `;
+         }
+        
+        // 创建错误行
+         function createErrorRow(message) {
+             return `<tr><td colspan="4" style="text-align: center; color: #dc3545;">${sanitizeText(message)}</td></tr>`;
+         }
+        
+        // 格式化创建时间
+        function formatCreateTime(createTime) {
+            if (!createTime) return 'N/A';
+            
+            try {
+                let date;
+                
+                // 处理微信云数据库的时间格式
+                if (typeof createTime === 'object') {
+                    if (createTime.$date) {
+                        date = new Date(createTime.$date);
+                    } else if (createTime.$timestamp) {
+                        date = new Date(createTime.$timestamp * 1000);
+                    } else {
+                        return 'N/A';
                     }
+                } else {
+                    // 处理普通时间格式
+                    date = new Date(createTime);
                 }
                 
-                const statusClass = `status-${task.status}`;
-                const statusText = getStatusText(task.status);
+                // 验证日期有效性
+                if (isNaN(date.getTime())) {
+                    console.warn('无效的时间数据:', createTime);
+                    return 'N/A';
+                }
                 
-                const content = `
-                    <tr>
-                        <td>${createTime}</td>
-                        <td>${task.print_code || 'N/A'}</td>
-                        <td><span class="${statusClass}">${statusText}</span></td>
-                        <td>${task.user_id || 'N/A'}</td>
-                    </tr>
-                `;
-                console.log('渲染任务数据:', task);
-                return content;
-            }).join('');
-            
-            tableBody.innerHTML = rows;
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (error) {
+                console.error('时间格式化错误:', error, createTime);
+                return 'N/A';
+            }
+        }
+        
+        // 文本安全处理
+        function sanitizeText(text) {
+            if (text === null || text === undefined) return '';
+            return String(text).replace(/[<>&"']/g, function(match) {
+                const escapeMap = {
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '&': '&amp;',
+                    '"': '&quot;',
+                    "'": '&#x27;'
+                };
+                return escapeMap[match];
+            });
         }
         
         // 获取状态文本
